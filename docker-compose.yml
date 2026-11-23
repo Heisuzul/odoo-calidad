@@ -1,0 +1,29 @@
+# Odoo + PostgreSQL para las pruebas de la entrega 2.
+# Si en el curso usaron otra versión de Odoo, cambie la etiqueta de la imagen (odoo:17.0, odoo:18.0, etc.).
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  odoo:
+    image: odoo:18.0
+    depends_on:
+      - db
+    ports:
+      - "8069:8069"
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: odoo
+    volumes:
+      - odoo-data:/var/lib/odoo
+      - ./addons:/mnt/extra-addons   # aquí irá el módulo con las pruebas unitarias
+
+volumes:
+  db-data:
+  odoo-data:

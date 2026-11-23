@@ -1,0 +1,15 @@
+# Entorno virtual y archivos temporales de Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Credenciales: nunca se suben al repositorio
+.env
+*.env
+
+# Archivos del sistema / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
