@@ -74,11 +74,29 @@ def _lista(driver):
     driver.get(BASE_URL + ruta)
     esperar(driver, '.o_searchview_input')
     while driver.find_elements(By.CSS_SELECTOR, '.o_searchview .o_facet_remove'):
+        cantidad = len(driver.find_elements(By.CSS_SELECTOR, '.o_searchview .o_facet_remove'))
         clic(driver, '.o_searchview .o_facet_remove')
+        WebDriverWait(driver, TIMEOUT).until(
+            lambda d: len(d.find_elements(
+                By.CSS_SELECTOR, '.o_searchview .o_facet_remove')) < cantidad)
     assert not driver.find_elements(By.CSS_SELECTOR, '.o_searchview_facet'), (
         'La lista conserva filtros o búsquedas anteriores')
     clic(driver, '.o_switch_view.o_list')
     esperar(driver, '.o_list_view')
+
+
+def _capturar_sesion(driver, shot):
+    """Espera contenido visible de Inventario antes de guardar el acceso."""
+    _lista(driver)
+    WebDriverWait(driver, TIMEOUT,
+                  ignored_exceptions=(StaleElementReferenceException,)).until(
+        EC.any_of(
+            EC.visibility_of_element_located((
+                By.CSS_SELECTOR, '.o_list_view .o_data_row td[name="name"]')),
+            EC.visibility_of_element_located((
+                By.CSS_SELECTOR, '.o_list_view .o_view_nocontent')),
+        ), message='Inventario aún no muestra productos ni el indicador de lista vacía')
+    shot('sesion_iniciada')
 
 
 def _nuevo(driver, referencias, nombre):
@@ -168,15 +186,18 @@ def _filtrar_archivados(driver):
                       d.find_elements(By.CSS_SELECTOR, '.o_facet_value')))
 
 
-def test_fc01_crear_producto(sesion, datos_productos):
+def test_fc01_crear_producto(sesion, datos_productos, shot):
     """FC-01 | HU001 | PE: nombre válido y nombre obligatorio vacío."""
     driver = sesion
+    _capturar_sesion(driver, shot)
     # Clase válida: Bienes, venta 25000, costo 12000.
     referencia = _nuevo(driver, datos_productos, 'Camisa FC01')
     clic(driver, '.o_field_widget[name="type"] input[data-value="consu"]')
     _escribir(driver, 'list_price', 25000)
     _escribir(driver, 'standard_price', 12000)
+    shot('producto_valido_completado')
     producto_id = _guardar(driver, referencia, 'Camisa FC01')
+    shot('producto_valido_guardado')
     assert _campo(driver, 'name').get_attribute('value') == 'Camisa FC01', (
         'Clase válida: el título del formulario no corresponde al producto')
     registro = _productos(driver, [('id', '=', producto_id)],
@@ -187,12 +208,14 @@ def test_fc01_crear_producto(sesion, datos_productos):
     _lista(driver)
     _buscar(driver, 'Camisa FC01')
     _resultados(driver, ['Camisa FC01'], 'FC-01, clase válida en la lista')
+    shot('producto_visible_en_lista')
 
     # Clase inválida: nombre vacío. La referencia identifica cualquier creación indebida.
     referencia_invalida = _nuevo(driver, datos_productos, None)
     _escribir(driver, 'list_price', 25000)
     clic(driver, '.o_form_button_save')
     invalido = esperar(driver, '.o_field_widget[name="name"].o_field_invalid')
+    shot('nombre_vacio_rechazado')
     assert 'o_required_modifier' in invalido.get_attribute('class'), (
         'Clase inválida: no se indica que el nombre es obligatorio')
     assert _campo(driver, 'name').get_attribute('value') == '', (
@@ -201,9 +224,10 @@ def test_fc01_crear_producto(sesion, datos_productos):
         'Posible no conformidad FC-01: Odoo creó un producto sin nombre')
 
 
-def test_fc02_asignar_categoria(sesion, datos_productos):
+def test_fc02_asignar_categoria(sesion, datos_productos, shot):
     """FC-02 | HU002 | PE: categoría explícita y categoría predeterminada."""
     driver = sesion
+    _capturar_sesion(driver, shot)
     # Clase A: seleccionar una categoría existente, sin crear categorías nuevas.
     referencia = _nuevo(driver, datos_productos, 'Mesa FC02')
     categoria = _campo(driver, 'categ_id')
@@ -212,7 +236,9 @@ def test_fc02_asignar_categoria(sesion, datos_productos):
     WebDriverWait(driver, TIMEOUT).until(EC.element_to_be_clickable((
         By.XPATH, "//li[contains(@class,'o-autocomplete--dropdown-item')]/a"
         "[normalize-space()='All / Saleable']"))).click()
+    shot('categoria_saleable_seleccionada')
     _guardar(driver, referencia, 'Mesa FC02')
+    shot('categoria_saleable_guardada')
     assert _campo(driver, 'categ_id').get_attribute('value') == 'All / Saleable', (
         'Clase A: no se persistió la categoría All / Saleable')
 
@@ -220,16 +246,19 @@ def test_fc02_asignar_categoria(sesion, datos_productos):
     referencia = _nuevo(driver, datos_productos, 'Mesa FC02 predeterminada')
     categoria_predeterminada = _campo(driver, 'categ_id').get_attribute('value')
     assert categoria_predeterminada, 'Clase B: Odoo no propuso una categoría'
+    shot('categoria_predeterminada_propuesta')
     print(f'FC-02, categoría predeterminada real: {categoria_predeterminada}')
     _guardar(driver, referencia, 'Mesa FC02 predeterminada')
+    shot('categoria_predeterminada_guardada')
     assert _campo(driver, 'categ_id').get_attribute('value') == categoria_predeterminada, (
         f'Clase B: no se conservó la categoría predeterminada '
         f'{categoria_predeterminada!r}')
 
 
-def test_fc03_buscar_producto(sesion, datos_productos):
+def test_fc03_buscar_producto(sesion, datos_productos, shot):
     """FC-03 | HU004 | PE: búsqueda existente e inexistente."""
     driver = sesion
+    _capturar_sesion(driver, shot)
     existentes = _productos(driver, [('name', '=', 'Camisa FC03')])
     if not existentes:
         referencia = _nuevo(driver, datos_productos, 'Camisa FC03')
@@ -242,21 +271,26 @@ def test_fc03_buscar_producto(sesion, datos_productos):
     _lista(driver)
     _buscar(driver, 'Camisa FC03')
     _resultados(driver, ['Camisa FC03'], 'FC-03, clase existente')
+    shot('busqueda_existente_un_resultado')
 
     # Clase inexistente: volver a la acción limpia evita combinar búsquedas.
     _lista(driver)
     _buscar(driver, 'Zzz no existe')
     resultados = _resultados(driver, [], 'FC-03, clase inexistente')
+    shot('busqueda_inexistente_sin_resultados')
     assert len(resultados) == 0, 'Clase inexistente: deben aparecer cero productos'
 
 
-def test_fc04_archivar_producto(sesion, datos_productos):
+def test_fc04_archivar_producto(sesion, datos_productos, shot):
     """FC-04 | HU010 | TD: activo/archivado × sin/con filtro Archivados."""
     driver = sesion
+    _capturar_sesion(driver, shot)
     referencia_a = _nuevo(driver, datos_productos, 'Prod FC04-A')
     _guardar(driver, referencia_a, 'Prod FC04-A')
+    shot('producto_a_activo')
     referencia_b = _nuevo(driver, datos_productos, 'Prod FC04-B')
     producto_b = _guardar(driver, referencia_b, 'Prod FC04-B')
+    shot('producto_b_activo')
     assert all(p['active'] for p in _productos(
         driver, [('default_code', 'in', [referencia_a, referencia_b])])), (
         'Precondición FC-04: ambos productos deben estar activos')
@@ -269,11 +303,13 @@ def test_fc04_archivar_producto(sesion, datos_productos):
     WebDriverWait(driver, TIMEOUT).until(
         lambda d: not _productos(d, [('id', '=', producto_b)])[0]['active'],
         message='FC-04: Acción > Archivar no archivó el producto B')
+    shot('producto_b_archivado')
 
     # Reglas 1 y 3: sin filtro, activo visible y archivado no visible.
     _lista(driver)
     _buscar(driver, 'Prod FC04-')
     sin_filtro = _resultados(driver, ['Prod FC04-A'], 'FC-04, sin filtro Archivados')
+    shot('sin_filtro_activo_visible_archivado_oculto')
     assert 'Prod FC04-A' in sin_filtro, 'Regla 1: activo sin filtro debe ser visible'
     assert 'Prod FC04-B' not in sin_filtro, 'Regla 3: archivado sin filtro debe ocultarse'
 
@@ -282,5 +318,6 @@ def test_fc04_archivar_producto(sesion, datos_productos):
     _filtrar_archivados(driver)
     _buscar(driver, 'Prod FC04-')
     con_filtro = _resultados(driver, ['Prod FC04-B'], 'FC-04, con filtro Archivados')
+    shot('con_filtro_activo_oculto_archivado_visible')
     assert 'Prod FC04-A' not in con_filtro, 'Regla 2: activo con filtro debe ocultarse'
     assert 'Prod FC04-B' in con_filtro, 'Regla 4: archivado con filtro debe ser visible'
