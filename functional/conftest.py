@@ -33,12 +33,25 @@ def pytest_runtest_makereport(item, call):
 
 
 @pytest.fixture
-def driver(request):
+def driver(request):    
     opts = Options()
+
     if HEADLESS:
         opts.add_argument("--headless=new")
+
     opts.add_argument("--window-size=1600,1000")
-    drv = webdriver.Chrome(options=opts)  # Selenium Manager descarga el driver
+
+    # Evitar ventanas emergentes del gestor de contraseñas.
+    opts.add_experimental_option("prefs", {
+        "credentials_enable_service": False,
+        "profile.password_manager_enabled": False,
+        "profile.password_manager_leak_detection": False,
+    })
+
+    opts.add_argument("--disable-features=PasswordLeakDetection")
+
+    drv = webdriver.Chrome(options=opts)
+
     drv.implicitly_wait(0)
     yield drv
     rep = getattr(request.node, "rep_call", None)
