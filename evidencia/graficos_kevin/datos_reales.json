@@ -1,0 +1,234 @@
+{
+  "functional": [
+    {
+      "name": "test_FC13_codigo_barras[unico]",
+      "status": "PASS",
+      "seconds": 11.217
+    },
+    {
+      "name": "test_FC13_codigo_barras[vacio]",
+      "status": "PASS",
+      "seconds": 11.439
+    },
+    {
+      "name": "test_FC13_codigo_barras[duplicado]",
+      "status": "PASS",
+      "seconds": 10.531
+    },
+    {
+      "name": "test_FC14_peso[negativo]",
+      "status": "PASS",
+      "seconds": 11.253
+    },
+    {
+      "name": "test_FC14_peso[cero]",
+      "status": "PASS",
+      "seconds": 10.258
+    },
+    {
+      "name": "test_FC14_peso[minimo_positivo]",
+      "status": "PASS",
+      "seconds": 10.34
+    },
+    {
+      "name": "test_FC14_peso[positivo]",
+      "status": "PASS",
+      "seconds": 10.109
+    },
+    {
+      "name": "test_FC15_volumen[negativo]",
+      "status": "PASS",
+      "seconds": 9.979
+    },
+    {
+      "name": "test_FC15_volumen[cero]",
+      "status": "PASS",
+      "seconds": 10.282
+    },
+    {
+      "name": "test_FC15_volumen[minimo_positivo]",
+      "status": "PASS",
+      "seconds": 11.021
+    },
+    {
+      "name": "test_FC15_volumen[positivo]",
+      "status": "PASS",
+      "seconds": 10.553
+    },
+    {
+      "name": "test_FC16_nombre_ubicacion[vacio]",
+      "status": "PASS",
+      "seconds": 9.409
+    },
+    {
+      "name": "test_FC16_nombre_ubicacion[uno]",
+      "status": "PASS",
+      "seconds": 9.851
+    },
+    {
+      "name": "test_FC16_nombre_ubicacion[dos]",
+      "status": "PASS",
+      "seconds": 10.176
+    }
+  ],
+  "unit": {
+    "tests": 6,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "statement_lines": [
+      610,
+      611,
+      612,
+      613,
+      618,
+      623,
+      624,
+      625
+    ],
+    "covered_statement_lines": [
+      610,
+      611,
+      612,
+      613,
+      618,
+      623,
+      624,
+      625
+    ],
+    "branch_arcs": [
+      [
+        611,
+        612
+      ],
+      [
+        611,
+        614
+      ],
+      [
+        623,
+        -1
+      ],
+      [
+        623,
+        624
+      ],
+      [
+        624,
+        623
+      ],
+      [
+        624,
+        625
+      ]
+    ],
+    "covered_branch_arcs": [
+      [
+        611,
+        612
+      ],
+      [
+        611,
+        614
+      ],
+      [
+        623,
+        -1
+      ],
+      [
+        623,
+        624
+      ],
+      [
+        624,
+        623
+      ],
+      [
+        624,
+        625
+      ]
+    ],
+    "observed_arcs": [
+      [
+        -1,
+        610
+      ],
+      [
+        610,
+        611
+      ],
+      [
+        611,
+        612
+      ],
+      [
+        611,
+        614
+      ],
+      [
+        612,
+        -1
+      ],
+      [
+        613,
+        618
+      ],
+      [
+        614,
+        615
+      ],
+      [
+        615,
+        616
+      ],
+      [
+        616,
+        613
+      ],
+      [
+        618,
+        619
+      ],
+      [
+        618,
+        623
+      ],
+      [
+        619,
+        620
+      ],
+      [
+        620,
+        621
+      ],
+      [
+        621,
+        618
+      ],
+      [
+        623,
+        -1
+      ],
+      [
+        623,
+        624
+      ],
+      [
+        624,
+        623
+      ],
+      [
+        624,
+        625
+      ],
+      [
+        625,
+        -1
+      ]
+    ],
+    "metric": "lineas de sentencias AST y arcos de if/for; lambda por casos, no por arcos"
+  },
+  "nonconformities": [],
+  "nc_note": "Clasificacion manual del informe; no inferida automaticamente de pytest.",
+  "timestamp": "2026-11-25T00:33:44.812362-05:00"
+}

@@ -3,6 +3,7 @@
 import inspect
 
 CANDIDATOS = [
+    ("stock.quant", "check_quantity"),
     ("stock.quant", "_get_available_quantity"),
     ("stock.quant", "_update_available_quantity"),
     ("stock.quant", "_update_reserved_quantity"),

@@ -1,0 +1,26 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.2.0, pluggy-1.7.0 -- C:\Users\Laura Sofia\OneDrive\Desktop\Odoo\odoo-calidad\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+metadata: {'Python': '3.12.10', 'Platform': 'Windows-11-10.0.26200-SP0', 'Packages': {'pytest': '9.2.0', 'pluggy': '1.7.0'}, 'Plugins': {'html': '4.2.0', 'metadata': '3.1.1'}}
+rootdir: C:\Users\Laura Sofia\OneDrive\Desktop\Odoo\odoo-calidad\functional
+plugins: html-4.2.0, metadata-3.1.1
+collecting ... collected 14 items
+
+test_kevin.py::test_FC13_codigo_barras[unico] PASSED                     [  7%]
+test_kevin.py::test_FC13_codigo_barras[vacio] PASSED                     [ 14%]
+test_kevin.py::test_FC13_codigo_barras[duplicado] PASSED                 [ 21%]
+test_kevin.py::test_FC14_peso[negativo] PASSED                           [ 28%]
+test_kevin.py::test_FC14_peso[cero] PASSED                               [ 35%]
+test_kevin.py::test_FC14_peso[minimo_positivo] PASSED                    [ 42%]
+test_kevin.py::test_FC14_peso[positivo] PASSED                           [ 50%]
+test_kevin.py::test_FC15_volumen[negativo] PASSED                        [ 57%]
+test_kevin.py::test_FC15_volumen[cero] PASSED                            [ 64%]
+test_kevin.py::test_FC15_volumen[minimo_positivo] PASSED                 [ 71%]
+test_kevin.py::test_FC15_volumen[positivo] PASSED                        [ 78%]
+test_kevin.py::test_FC16_nombre_ubicacion[vacio] PASSED                  [ 85%]
+test_kevin.py::test_FC16_nombre_ubicacion[uno] PASSED                    [ 92%]
+test_kevin.py::test_FC16_nombre_ubicacion[dos] PASSED                    [100%]
+
+- generated xml file: C:\Users\Laura Sofia\OneDrive\Desktop\Odoo\odoo-calidad\evidencia\resultados_kevin.xml -
+- Generated html report: file:///C:/Users/Laura%20Sofia/OneDrive/Desktop/Odoo/odoo-calidad/functional/../evidencia/reporte_kevin.html -
+======================= 14 passed in 146.49s (0:02:26) ========================
