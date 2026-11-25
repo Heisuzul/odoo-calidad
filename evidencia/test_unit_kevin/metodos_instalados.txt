@@ -1,0 +1,419 @@
+﻿docker : Warn: Can't find .pfb for face 'Courier'
+En línea: 1 Carácter: 41
++ ... ethods.py | docker compose exec -T odoo /entrypoint.sh odoo shell -d  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Warn: Can't find .pfb for face 'Courier':String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+================================================================================
+# stock.quant.check_quantity   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_quant.py)
+    def check_quantity(self):
+        sn_quants = self.filtered(lambda q: q.product_id.tracking == 'serial' and q.location_id.usage != 'inventory' and q.lot_id)
+        if not sn_quants:
+            return
+        domain = [
+            ('product_id', 'in', sn_quants.product_id.ids),
+            ('location_id', 'child_of', sn_quants.location_id.ids),
+            ('lot_id', 'in', sn_quants.lot_id.ids)
+        ]
+        groups = self._read_group(
+            domain,
+            ['product_id', 'location_id', 'lot_id'],
+            ['quantity:sum'],
+        )
+        for product, _location, lot, qty in groups:
+            if float_compare(abs(qty), 1, precision_rounding=product.uom_id.rounding) > 0:
+                raise ValidationError(_('The serial number has already been assigned: \n Product: %(product)s, Serial Number: %(serial_number)s', product=product.display_name, serial_number=lot.name))
+
+================================================================================
+# stock.quant._get_available_quantity   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_quant.py)
+    def _get_available_quantity(self, product_id, location_id, lot_id=None, package_id=None, owner_id=None, strict=False, allow_negative=False):
+        """ Return the available quantity, i.e. the sum of `quantity` minus the sum of
+        `reserved_quantity`, for the set of quants sharing the combination of `product_id,
+        location_id` if `strict` is set to False or sharing the *exact same characteristics*
+        otherwise.
+        The set of quants to filter from can be in `self`, if not a search will be done
+        This method is called in the following usecases:
+            - when a stock move checks its availability
+            - when a stock move actually assign
+            - when editing a move line, to check if the new value is forced or not
+            - when validating a move line with some forced values and have to potentially unlink an
+              equivalent move line in another picking
+        In the two first usecases, `strict` should be set to `False`, as we don't know what exact
+        quants we'll reserve, and the characteristics are meaningless in this context.
+        In the last ones, `strict` should be set to `True`, as we work on a specific set of
+        characteristics.
+
+        :return: available quantity as a float
+        """
+        self = self.sudo()
+        quants = self._gather(product_id, location_id, lot_id=lot_id, package_id=package_id, owner_id=owner_id, strict=strict)
+        rounding = product_id.uom_id.rounding
+        if product_id.tracking == 'none':
+            available_quantity = sum(quants.mapped('quantity')) - sum(quants.mapped('reserved_quantity'))
+            if allow_negative:
+                return available_quantity
+            else:
+                return available_quantity if float_compare(available_quantity, 0.0, precision_rounding=rounding) >= 0.0 else 0.0
+        else:
+            availaible_quantities = {lot_id: 0.0 for lot_id in list(set(quants.mapped('lot_id'))) + ['untracked']}
+            for quant in quants:
+                if not quant.lot_id and strict and lot_id:
+                    continue
+                if not quant.lot_id:
+                    availaible_quantities['untracked'] += quant.quantity - quant.reserved_quantity
+                else:
+                    availaible_quantities[quant.lot_id] += quant.quantity - quant.reserved_quantity
+            if allow_negative:
+                return sum(availaible_quantities.values())
+            else:
+                return sum([available_quantity for available_quantity in availaible_quantities.values() if float_compare(available_quantity, 0, precision_rounding=rounding) > 0])
+
+================================================================================
+# stock.quant._update_available_quantity   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_quant.py)
+    @api.model
+    def _update_available_quantity(self, product_id, location_id, quantity=False, reserved_quantity=False, lot_id=None, package_id=None, owner_id=None, in_date=None):
+        """ Increase or decrease `quantity` or 'reserved quantity' of a set of quants for a given set of
+        product_id/location_id/lot_id/package_id/owner_id.
+
+        :param product_id:
+        :param location_id:
+        :param quantity:
+        :param lot_id:
+        :param package_id:
+        :param owner_id:
+        :param datetime in_date: Should only be passed when calls to this method are done in
+                                 order to move a quant. When creating a tracked quant, the
+                                 current datetime will be used.
+        :return: tuple (available_quantity, in_date as a datetime)
+        """
+        if not (quantity or reserved_quantity):
+            raise ValidationError(_('Quantity or Reserved Quantity should be set.'))
+        self = self.sudo()
+        quants = self._gather(product_id, location_id, lot_id=lot_id, package_id=package_id, owner_id=owner_id, strict=True)
+        if lot_id:
+            if float_compare(quantity, 0, precision_rounding=product_id.uom_id.rounding) > 0:
+                quants = quants.filtered(lambda q: q.lot_id)
+            else:
+                # Don't remove quantity from a negative quant without lot
+                quants = quants.filtered(lambda q: float_compare(q.quantity, 0, precision_rounding=q.product_uom_id.rounding) > 0 or q.lot_id)
+
+        if location_id.should_bypass_reservation():
+            incoming_dates = []
+        else:
+            incoming_dates = [quant.in_date for quant in quants if quant.in_date and
+                              float_compare(quant.quantity, 0, precision_rounding=quant.product_uom_id.rounding) > 0]
+        if in_date:
+            incoming_dates += [in_date]
+        # If multiple incoming dates are available for a given lot_id/package_id/owner_id, we
+        # consider only the oldest one as being relevant.
+        if incoming_dates:
+            in_date = min(incoming_dates)
+        else:
+            in_date = fields.Datetime.now()
+
+        quant = None
+        if quants:
+            # see _acquire_one_job for explanations
+            self._cr.execute("SELECT id FROM stock_quant WHERE id IN %s ORDER BY lot_id LIMIT 1 FOR NO KEY UPDATE SKIP LOCKED", [tuple(quants.ids)])
+            stock_quant_result = self._cr.fetchone()
+            if stock_quant_result:
+                quant = self.browse(stock_quant_result[0])
+
+        if quant:
+            vals = {'in_date': in_date}
+            if quantity:
+                vals['quantity'] = quant.quantity + quantity
+            if reserved_quantity:
+                vals['reserved_quantity'] = max(0, quant.reserved_quantity + reserved_quantity)
+            quant.write(vals)
+        else:
+            vals = {
+                'product_id': product_id.id,
+                'location_id': location_id.id,
+                'lot_id': lot_id and lot_id.id,
+                'package_id': package_id and package_id.id,
+                'owner_id': owner_id and owner_id.id,
+                'in_date': in_date,
+            }
+            if quantity:
+                vals['quantity'] = quantity
+            if reserved_quantity:
+                vals['reserved_quantity'] = reserved_quantity
+            self.create(vals)
+        return self._get_available_quantity(product_id, location_id, lot_id=lot_id, package_id=package_id, owner_id=owner_id, strict=True, allow_negative=True), in_date
+
+================================================================================
+# stock.quant._update_reserved_quantity   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_quant.py)
+    @api.model
+    def _update_reserved_quantity(self, product_id, location_id, quantity, lot_id=None, package_id=None, owner_id=None, strict=True):
+        """ Increase or decrease `reserved_quantity` of a set of quants for a given set of
+        product_id/location_id/lot_id/package_id/owner_id.
+
+        :param product_id:
+        :param location_id:
+        :param quantity:
+        :param lot_id:
+        :param package_id:
+        :param owner_id:
+        :return: available_quantity
+        """
+        self._update_available_quantity(product_id, location_id, reserved_quantity=quantity, lot_id=lot_id, package_id=package_id, owner_id=owner_id)
+
+================================================================================
+# stock.quant._compute_inventory_diff_quantity   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_quant.py)
+    @api.depends('inventory_quantity')
+    def _compute_inventory_diff_quantity(self):
+        for quant in self:
+            quant.inventory_diff_quantity = quant.inventory_quantity - quant.quantity
+
+================================================================================
+# stock.quant.action_apply_inventory   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_quant.py)
+    def action_apply_inventory(self):
+        products_tracked_without_lot = []
+        for quant in self:
+            rounding = quant.product_uom_id.rounding
+            if fields.Float.is_zero(quant.inventory_diff_quantity, precision_rounding=rounding)\
+                    and fields.Float.is_zero(quant.inventory_quantity, precision_rounding=rounding)\
+                    and fields.Float.is_zero(quant.quantity, precision_rounding=rounding):
+                continue
+            if quant.product_id.tracking in ['lot', 'serial'] and\
+                    not quant.lot_id and quant.inventory_quantity != quant.quantity and not quant.quantity:
+                products_tracked_without_lot.append(quant.product_id.id)
+        # for some reason if multi-record, env.context doesn't pass to wizards...
+        ctx = dict(self.env.context or {})
+        ctx['default_quant_ids'] = self.ids
+        quants_outdated = self.filtered(lambda quant: quant.is_outdated)
+        if not self.env.context.get('set_inventory_quantity_auto_apply'):
+            if quants_outdated:
+                ctx['default_quant_to_fix_ids'] = quants_outdated.ids
+                return {
+                    'name': _('Conflict in Inventory Adjustment'),
+                    'type': 'ir.actions.act_window',
+                    'view_mode': 'form',
+                    'views': [(False, 'form')],
+                    'res_model': 'stock.inventory.conflict',
+                    'target': 'new',
+                    'context': ctx,
+                }
+            if products_tracked_without_lot:
+                ctx['default_product_ids'] = products_tracked_without_lot
+                return {
+                    'name': _('Tracked Products in Inventory Adjustment'),
+                    'type': 'ir.actions.act_window',
+                    'view_mode': 'form',
+                    'views': [(False, 'form')],
+                    'res_model': 'stock.track.confirmation',
+                    'target': 'new',
+                    'context': ctx,
+                }
+        self._apply_inventory()
+        self.inventory_quantity_set = False
+
+================================================================================
+# stock.warehouse.orderpoint._compute_qty_to_order   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_orderpoint.py)
+    @api.depends('qty_to_order_manual', 'qty_to_order_computed')
+    def _compute_qty_to_order(self):
+        for orderpoint in self:
+            orderpoint.qty_to_order = orderpoint.qty_to_order_manual if orderpoint.qty_to_order_manual else orderpoint.qty_to_order_computed
+
+================================================================================
+# stock.warehouse.orderpoint._compute_qty   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_orderpoint.py)
+    @api.depends('product_id', 'location_id', 'product_id.stock_move_ids', 'product_id.stock_move_ids.state',
+                 'product_id.stock_move_ids.date', 'product_id.stock_move_ids.product_uom_qty', 'product_id.seller_ids.delay')
+    def _compute_qty(self):
+        orderpoints_contexts = defaultdict(lambda: self.env['stock.warehouse.orderpoint'])
+        for orderpoint in self:
+            if not orderpoint.product_id or not orderpoint.location_id:
+                orderpoint.qty_on_hand = False
+                orderpoint.qty_forecast = False
+                continue
+            orderpoint_context = orderpoint._get_product_context()
+            product_context = frozendict({**orderpoint_context})
+            orderpoints_contexts[product_context] |= orderpoint
+        for orderpoint_context, orderpoints_by_context in orderpoints_contexts.items():
+            products_qty = {
+                p['id']: p for p in orderpoints_by_context.product_id.with_context(orderpoint_context).read(['qty_available', 'virtual_available'])
+            }
+            products_qty_in_progress = orderpoints_by_context._quantity_in_progress()
+            for orderpoint in orderpoints_by_context:
+                orderpoint.qty_on_hand = products_qty[orderpoint.product_id.id]['qty_available']
+                orderpoint.qty_forecast = products_qty[orderpoint.product_id.id]['virtual_available'] + products_qty_in_progress[orderpoint.id]
+
+================================================================================
+# stock.lot._check_unique_lot   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_lot.py)
+    @api.constrains('name', 'product_id', 'company_id')
+    def _check_unique_lot(self):
+        domain = [('product_id', 'in', self.product_id.ids),
+                  ('name', 'in', self.mapped('name'))]
+        groupby = ['company_id', 'product_id', 'name']
+        if any(not lot.company_id for lot in self):
+            # We need to check across other companies to not have duplicates between 'no-company' and a company.
+            self = self.sudo()
+        records = self._read_group(domain, groupby, ['__count'], order='company_id DESC')
+        error_message_lines = set()
+        cross_lots = {}
+        for company, product, name, count in records:
+            if not company:
+                cross_lots[(product, name)] = count
+            # For company-specific lots, we check that there is no duplicate with 'no-company' lots, but NOT between specific-company ones.
+            if (company and (cross_lots.get((product, name), 0) + count) > 1) or count > 1:
+                error_message_lines.add(_(" - Product: %(product)s, Lot/Serial Number: %(lot)s", product=product.display_name, lot=name))
+        if error_message_lines:
+            raise ValidationError(
+                _(
+                    "The combination of lot/serial number and product must be unique within a company including when no company is defined.\nThe following combinations contain duplicates:\n%(error_lines)s",
+                    error_lines="\n".join(error_message_lines),
+                ),
+            )
+
+================================================================================
+# product.product._check_barcode_uniqueness   (/usr/lib/python3/dist-packages/odoo/addons/product/models/product_product.py)
+    @api.constrains('barcode')
+    def _check_barcode_uniqueness(self):
+        """ With GS1 nomenclature, products and packagings use the same pattern. Therefore, we need
+        to ensure the uniqueness between products' barcodes and packagings' ones"""
+        # Barcodes should only be unique within a company
+        for company_id, barcodes_within_company in self._get_barcodes_by_company():
+            self._check_duplicated_product_barcodes(barcodes_within_company, company_id)
+            self._check_duplicated_packaging_barcodes(barcodes_within_company, company_id)
+
+================================================================================
+# product.product._compute_quantities_dict   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/product.py)
+    def _compute_quantities_dict(self, lot_id, owner_id, package_id, from_date=False, to_date=False):
+        domain_quant_loc, domain_move_in_loc, domain_move_out_loc = self._get_domain_locations()
+        domain_quant = [('product_id', 'in', self.ids)] + domain_quant_loc
+        dates_in_the_past = False
+        # only to_date as to_date will correspond to qty_available
+        to_date = fields.Datetime.to_datetime(to_date)
+        if to_date and to_date < fields.Datetime.now():
+            dates_in_the_past = True
+
+        domain_move_in = [('product_id', 'in', self.ids)] + domain_move_in_loc
+        domain_move_out = [('product_id', 'in', self.ids)] + domain_move_out_loc
+        if lot_id is not None:
+            domain_quant += [('lot_id', '=', lot_id)]
+        if owner_id is not None:
+            domain_quant += [('owner_id', '=', owner_id)]
+            domain_move_in += [('restrict_partner_id', '=', owner_id)]
+            domain_move_out += [('restrict_partner_id', '=', owner_id)]
+        if package_id is not None:
+            domain_quant += [('package_id', '=', package_id)]
+        if dates_in_the_past:
+            domain_move_in_done = list(domain_move_in)
+            domain_move_out_done = list(domain_move_out)
+        if from_date:
+            date_date_expected_domain_from = [('date', '>=', from_date)]
+            domain_move_in += date_date_expected_domain_from
+            domain_move_out += date_date_expected_domain_from
+        if to_date:
+            date_date_expected_domain_to = [('date', '<=', to_date)]
+            domain_move_in += date_date_expected_domain_to
+            domain_move_out += date_date_expected_domain_to
+
+        Move = self.env['stock.move'].with_context(active_test=False)
+        Quant = self.env['stock.quant'].with_context(active_test=False)
+        domain_move_in_todo = [('state', 'in', ('waiting', 'confirmed', 'assigned', 'partially_available'))] + domain_move_in
+        domain_move_out_todo = [('state', 'in', ('waiting', 'confirmed', 'assigned', 'partially_available'))] + domain_move_out
+        moves_in_res = {product.id: product_qty for product, product_qty in Move._read_group(domain_move_in_todo, ['product_id'], ['product_qty:sum'])}
+        moves_out_res = {product.id: product_qty for product, product_qty in Move._read_group(domain_move_out_todo, ['product_id'], ['product_qty:sum'])}
+        quants_res = {product.id: (quantity, reserved_quantity) for product, quantity, reserved_quantity in Quant._read_group(domain_quant, ['product_id'], ['quantity:sum', 'reserved_quantity:sum'])}
+        moves_in_res_past = defaultdict(float)
+        moves_out_res_past = defaultdict(float)
+        if dates_in_the_past:
+            # Calculate the moves that were done before now to calculate back in time (as most questions will be recent ones)
+            domain_move_in_done = [('state', '=', 'done'), ('date', '>', to_date)] + domain_move_in_done
+            domain_move_out_done = [('state', '=', 'done'), ('date', '>', to_date)] + domain_move_out_done
+
+            groupby = ['product_id', 'product_uom']
+            for product, uom, quantity in Move._read_group(domain_move_in_done, groupby, ['quantity:sum']):
+                moves_in_res_past[product.id] += uom._compute_quantity(quantity, product.uom_id)
+
+            for product, uom, quantity in Move._read_group(domain_move_out_done, groupby, ['quantity:sum']):
+                moves_out_res_past[product.id] += uom._compute_quantity(quantity, product.uom_id)
+
+        res = dict()
+        for product in self.with_context(prefetch_fields=False):
+            origin_product_id = product._origin.id
+            product_id = product.id
+            if not origin_product_id or (
+                origin_product_id not in quants_res
+                and origin_product_id not in moves_in_res
+                and origin_product_id not in moves_out_res
+                and origin_product_id not in moves_in_res_past
+                and origin_product_id not in moves_out_res_past
+            ):
+                res[product_id] = dict.fromkeys(
+                    ['qty_available', 'free_qty', 'incoming_qty', 'outgoing_qty', 'virtual_available'],
+                    0.0,
+                )
+                continue
+            rounding = product.uom_id.rounding
+            res[product_id] = {}
+            if dates_in_the_past:
+                qty_available = quants_res.get(origin_product_id, [0.0])[0] - moves_in_res_past.get(origin_product_id, 0.0) + moves_out_res_past.get(origin_product_id, 0.0)
+            else:
+                qty_available = quants_res.get(origin_product_id, [0.0])[0]
+            reserved_quantity = quants_res.get(origin_product_id, [False, 0.0])[1]
+            res[product_id]['qty_available'] = float_round(qty_available, precision_rounding=rounding)
+            res[product_id]['free_qty'] = float_round(qty_available - reserved_quantity, precision_rounding=rounding)
+            res[product_id]['incoming_qty'] = float_round(moves_in_res.get(origin_product_id, 0.0), precision_rounding=rounding)
+            res[product_id]['outgoing_qty'] = float_round(moves_out_res.get(origin_product_id, 0.0), precision_rounding=rounding)
+            res[product_id]['virtual_available'] = float_round(
+                qty_available + res[product_id]['incoming_qty'] - res[product_id]['outgoing_qty'],
+                precision_rounding=rounding)
+
+        return res
+
+================================================================================
+# product.template._compute_quantities_dict   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/product.py)
+    def _compute_quantities_dict(self):
+        variants_available = {
+            p['id']: p for p in self.product_variant_ids._origin.read(['qty_available', 'virtual_available', 'incoming_qty', 'outgoing_qty'])
+        }
+        prod_available = {}
+        for template in self:
+            qty_available = 0
+            virtual_available = 0
+            incoming_qty = 0
+            outgoing_qty = 0
+            for p in template.product_variant_ids._origin:
+                qty_available += variants_available[p.id]["qty_available"]
+                virtual_available += variants_available[p.id]["virtual_available"]
+                incoming_qty += variants_available[p.id]["incoming_qty"]
+                outgoing_qty += variants_available[p.id]["outgoing_qty"]
+            prod_available[template.id] = {
+                "qty_available": qty_available,
+                "virtual_available": virtual_available,
+                "incoming_qty": incoming_qty,
+                "outgoing_qty": outgoing_qty,
+            }
+        return prod_available
+
+================================================================================
+# product.template.action_archive   (/usr/lib/python3/dist-packages/odoo/models.py)
+    def action_archive(self):
+        """Sets :attr:`active` to ``False`` on a recordset, by calling
+         :meth:`toggle_active` on its currently active records.
+        """
+        assert self._active_name, f"No 'active' field on model {self._name}"
+        return self.filtered(lambda record: record[self._active_name]).toggle_active()
+
+================================================================================
+# product.category._compute_complete_name   (/usr/lib/python3/dist-packages/odoo/addons/product/models/product_category.py)
+    @api.depends('name', 'parent_id.complete_name')
+    def _compute_complete_name(self):
+        for category in self:
+            if category.parent_id:
+                category.complete_name = '%s / %s' % (category.parent_id.complete_name, category.name)
+            else:
+                category.complete_name = category.name
+
+================================================================================
+# stock.move._compute_product_qty   (/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_move.py)
+    @api.depends('product_id', 'product_uom', 'product_uom_qty', 'state')
+    def _compute_product_qty(self):
+        for move in self:
+            move.product_qty = move.product_uom._compute_quantity(
+                move.product_uom_qty, move.product_id.uom_id, rounding_method='HALF-UP')
+
