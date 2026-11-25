@@ -162,9 +162,8 @@ Se usó Chrome headless mediante la opción existente en conftest.
 La consola carecía de Python real: se instaló Python 3.12.10 y se creó `.venv`.
 Se midió cobertura con trazado estándar, siguiendo el estilo de Rubén, sin
 instalar paquetes adicionales dentro del contenedor Odoo.
-Git no tenía nombre ni correo de autor configurados. Se eligió para este commit
-`Kevin Burgos <kevin@localhost>` como identidad local, sin atribuirle una cuenta
-o correo público no confirmado y sin modificar la configuración global.
+El commit se firmó con la identidad de Git configurada localmente por el
+autor (Kevin Burgos), sin modificar la configuración global.
 
 El informe anterior contenía una instrucción de shell con `<` para PowerShell;
 para reproducción se usa `Get-Content -Raw ... | docker compose exec -T ...`.
