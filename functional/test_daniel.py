@@ -2,10 +2,8 @@ r"""Pruebas funcionales de Daniel para Odoo 18, módulo Inventario.
 
 Aporte correspondiente a la Entrega 2 de Calidad de Productos de Software.
 
-Diseño documental FC-05..FC-12: docs/diseno_pruebas_funcionales_daniel.md
-
-IMPLEMENTADAS PARA EJECUCIÓN LOCAL: FC-05, FC-06, FC-07, FC-09.
-POR IMPLEMENTAR Y VERIFICAR UI DE INVENTARIO: FC-08, FC-10, FC-11, FC-12.
+Casos funcionales propios: FC-17 a FC-24 (ocho pruebas automatizadas).
+La matriz y el informe final pertenecen al documento grupal Entrega 2.
 
 Todas las acciones funcionales evaluadas se ejecutan en la interfaz de Odoo
 mediante Selenium. Las lecturas RPC reutilizan la sesión del navegador SOLO
@@ -287,34 +285,34 @@ def _nombres_lista(driver):
     """)
 
 
-def test_fc05_modificar_precio(sesion, productos_daniel, shot):
-    """FC-05 | RF-05 | PE: precio positivo, edición y persistencia."""
+def test_fc17_modificar_precio(sesion, productos_daniel, shot):
+    """FC-17 | RF-17 | PE: precio positivo, edición y persistencia."""
     d = sesion
-    referencia, _ = _crear_producto(d, productos_daniel, 'FC05', list_price=100)
+    referencia, _ = _crear_producto(d, productos_daniel, 'FC17', list_price=100)
     _verificar_persistencia(d, referencia, 'list_price', 100)
     shot('precio_inicial_100')
     _actualizar_y_recargar(d, referencia, 'list_price', 25000)
     shot('precio_final_25000')
 
 
-def test_fc06_valores_frontera_precio(sesion, productos_daniel, shot):
-    """FC-06 | RF-06 | VL: 0.00 y 0.01, dos fronteras consecutivas.
+def test_fc18_valores_frontera_precio(sesion, productos_daniel, shot):
+    """FC-18 | RF-18 | VL: 0.00 y 0.01, dos fronteras consecutivas.
 
     Expectativa provisional para configuración estándar de prueba. Si falla,
     revisar la regla real de Odoo antes de clasificar como defecto de producto.
     """
     d = sesion
-    referencia, _ = _crear_producto(d, productos_daniel, 'FC06', list_price=100)
+    referencia, _ = _crear_producto(d, productos_daniel, 'FC18', list_price=100)
     _actualizar_y_recargar(d, referencia, 'list_price', 0)
     shot('frontera_cero')
     _actualizar_y_recargar(d, referencia, 'list_price', 0.01)
     shot('frontera_001')
 
 
-def test_fc07_buscar_referencia(sesion, productos_daniel, shot):
-    """FC-07 | RF-07 | PE: referencia interna existente e inexistente."""
+def test_fc19_buscar_referencia(sesion, productos_daniel, shot):
+    """FC-19 | RF-19 | PE: referencia interna existente e inexistente."""
     d = sesion
-    referencia, nombre = _crear_producto(d, productos_daniel, 'FC07')
+    referencia, nombre = _crear_producto(d, productos_daniel, 'FC19')
     _abrir_lista(d)
     _buscar(d, referencia)
     WebDriverWait(d, TIMEOUT).until(lambda x: nombre in _nombres_lista(x))
@@ -333,10 +331,10 @@ def test_fc07_buscar_referencia(sesion, productos_daniel, shot):
     shot('referencia_inexistente')
 
 
-def test_fc09_modificar_costo(sesion, productos_daniel, shot):
-    """FC-09 | RF-09 | PE: cambio del costo estándar y persistencia."""
+def test_fc21_modificar_costo(sesion, productos_daniel, shot):
+    """FC-21 | RF-21 | PE: cambio del costo estándar y persistencia."""
     d = sesion
-    referencia, _ = _crear_producto(d, productos_daniel, 'FC09', standard_price=120)
+    referencia, _ = _crear_producto(d, productos_daniel, 'FC21', standard_price=120)
     _verificar_persistencia(d, referencia, 'standard_price', 120)
     shot('costo_inicial_120')
     _actualizar_y_recargar(d, referencia, 'standard_price', 200)
@@ -385,14 +383,14 @@ def _estado_activo_daniel(driver, referencia):
     return bool(registros[0]["active"])
 
 
-def test_fc08_restaurar_producto(sesion, productos_daniel, shot):
-    """FC-08 | RF-08 | TE: activo -> archivado -> activo."""
+def test_fc20_restaurar_producto(sesion, productos_daniel, shot):
+    """FC-20 | RF-20 | TE: activo -> archivado -> activo."""
 
     d = sesion
 
     # ESTADO 1: crear producto activo.
     referencia, nombre = _crear_producto(
-        d, productos_daniel, "FC08"
+        d, productos_daniel, "FC20"
     )
 
     assert _estado_activo_daniel(d, referencia) is True
@@ -482,21 +480,604 @@ def test_fc08_restaurar_producto(sesion, productos_daniel, shot):
         ) is True
     )
 
+    
     # ESTADO 3: comprobar que volvió al listado activo.
     _abrir_lista(d)
     _buscar(d, referencia)
 
-    WebDriverWait(d, TIMEOUT).until(
-        lambda x: nombre in _nombres_lista(x)
+    # Esperar a que Odoo termine de filtrar.
+    # No basta con que el producto aparezca entre otros.
+    WebDriverWait(
+        d,
+        20,
+        poll_frequency=0.3
+    ).until(
+        lambda x: _nombres_lista(x) == [nombre],
+        message=(
+            "FC-20: la búsqueda no devolvió "
+            "únicamente el producto restaurado"
+        )
     )
 
-    assert _nombres_lista(d) == [nombre]
-    assert _estado_activo_daniel(d, referencia) is True
+    encontrados = _nombres_lista(d)
+
+    assert encontrados == [nombre], (
+        f"FC-20: resultados inesperados: {encontrados}"
+    )
+
+    assert _estado_activo_daniel(
+        d, referencia
+    ) is True
+
 
     shot("04_producto_restaurado_activo")
 
     print(
-        "FC-08: activo -> archivado -> activo "
+        "FC-20: activo -> archivado -> activo "
         "verificado correctamente",
         flush=True
+    )
+
+
+
+def test_fc22_existencias_iniciales(sesion, shot):
+    """FC-22 | RF-22 | PE: registrar 5 unidades desde stock cero."""
+
+    d = sesion
+
+    # PRECONDICIÓN: un único almacén en la base de pruebas.
+    almacenes = _rpc(
+        d, "stock.warehouse", "search_read", [[]],
+        fields=["id", "name", "lot_stock_id"],
+        limit=2,
+    )
+
+    assert len(almacenes) == 1, (
+        "FC-22 requiere un único almacén de pruebas."
+    )
+
+    ubicacion_id = almacenes[0]["lot_stock_id"][0]
+
+    # Crear un producto propio desde la interfaz.
+    # No usar productos_daniel: los movimientos de inventario
+    # deben conservarse como evidencia y trazabilidad.
+    referencia, nombre = _crear_producto(d, [], "FC22")
+
+    print(f"Producto FC-22: {referencia}", flush=True)
+
+    # Activar Track Inventory desde la interfaz.
+    widget = esperar(
+        d, '.o_field_widget[name="is_storable"]'
+    )
+
+    casilla = widget.find_element(
+        By.CSS_SELECTOR, 'input[type="checkbox"]'
+    )
+
+    
+    if not casilla.is_selected():
+        casilla.click()
+        print("FC-22: Track Inventory activado", flush=True)
+    else:
+        print("FC-22: Track Inventory ya estaba activo", flush=True)
+
+    # Guardar solamente si hay cambios pendientes.
+    botones_guardar = d.find_elements(
+        By.CSS_SELECTOR, ".o_form_button_save"
+    )
+
+    if botones_guardar:
+        if botones_guardar[0].is_displayed():
+            botones_guardar[0].click()
+            print("FC-22: cambios guardados", flush=True)
+
+    # Confirmar que Odoo almacenó el cambio.
+    WebDriverWait(d, TIMEOUT).until(
+        lambda x: _rpc(
+            x,
+            "product.template",
+            "search_read",
+            [[("default_code", "=", referencia)]],
+            fields=["is_storable"],
+        )[0]["is_storable"] is True
+    )
+
+    print("FC-22: inventario habilitado", flush=True)
+
+
+    # Consultar el identificador de la variante creada.
+    plantilla = _registros(d, referencia)[0]
+
+    variantes = WebDriverWait(d, TIMEOUT).until(
+        lambda x: _rpc(
+            x, "product.product", "search_read",
+            [[("product_tmpl_id", "=", plantilla["id"])]],
+            fields=["id", "is_storable"],
+        )
+    )
+
+    assert len(variantes) == 1
+    assert variantes[0]["is_storable"] is True
+
+    producto_id = variantes[0]["id"]
+
+    def cantidad_en_almacen(driver):
+        quants = _rpc(
+            driver, "stock.quant", "search_read",
+            [[
+                ("product_id", "=", producto_id),
+                ("location_id", "=", ubicacion_id),
+            ]],
+            fields=["quantity"],
+        )
+        return sum(float(q["quantity"]) for q in quants)
+
+    # Verificar inventario inicial.
+    assert cantidad_en_almacen(d) == 0, (
+        "El producto no comenzó con inventario cero"
+    )
+
+    shot("fc10_stock_inicial_cero")
+
+    # Acción funcional desde el formulario del producto.
+    boton = WebDriverWait(d, TIMEOUT).until(
+        lambda x: next(
+            (
+                e for e in x.find_elements(
+                    By.CSS_SELECTOR,
+                    '.o_form_view button'
+                    '[name="action_update_quantity_on_hand"]'
+                )
+                if e.is_displayed() and e.is_enabled()
+            ),
+            False,
+        )
+    )
+
+    boton.click()
+
+    # El formulario simplificado puede variar según permisos
+    # de inventario y ubicaciones avanzadas.
+    try:
+        esperar(
+            d,
+            '.o_dialog .o_field_widget'
+            '[name="new_quantity"] input',
+            timeout=8,
+        )
+    except TimeoutException:
+        shot("fc10_interfaz_alternativa")
+        pytest.fail(
+            "Odoo abrió una interfaz de cantidades distinta "
+            "del formulario simplificado. Revisar la captura "
+            "antes de automatizar la aplicación del ajuste."
+        )
+
+    # Registrar el conteo físico.
+    _escribir(d, "new_quantity", 5)
+
+    shot("fc10_conteo_cinco")
+
+    clic(
+        d,
+        '.o_dialog button[name="change_product_qty"]'
+    )
+
+    # Verificar que Odoo registró las cinco unidades.
+    WebDriverWait(d, 20).until(
+        lambda x: cantidad_en_almacen(x) == 5,
+        message="No se persistieron las cinco unidades"
+    )
+
+    # Verificar trazabilidad del ajuste.
+    movimientos = _rpc(
+        d, "stock.move", "search_read",
+        [[
+            ("product_id", "=", producto_id),
+            ("is_inventory", "=", True),
+            ("state", "=", "done"),
+        ]],
+        fields=["id", "state"],
+    )
+
+    assert movimientos, (
+        "No se encontró un movimiento de inventario validado"
+    )
+
+    d.refresh()
+    shot("fc10_existencias_finales")
+
+    print(
+        f"FC-22 PASSED: {referencia}, 0 -> 5 unidades. "
+        f"Movimientos: {len(movimientos)}",
+        flush=True,
+    )
+
+    print(
+        "Producto conservado en la base de pruebas "
+        "para mantener la trazabilidad del ajuste.",
+        flush=True,
+    )
+
+
+
+def test_fc23_ajuste_positivo(sesion, shot):
+    """FC-23 | RF-23 | VL: incremento mínimo de 5 a 6 unidades."""
+
+    d = sesion
+
+    almacenes = _rpc(
+        d, "stock.warehouse", "search_read", [[]],
+        fields=["id", "lot_stock_id"],
+        limit=2,
+    )
+    assert len(almacenes) == 1, (
+        "FC-23 requiere un único almacén de pruebas"
+    )
+
+    ubicacion_id = almacenes[0]["lot_stock_id"][0]
+
+    # Producto exclusivo de esta prueba.
+    # Se conserva por sus movimientos de inventario.
+    referencia, _ = _crear_producto(d, [], "FC23")
+    print(f"Producto FC-23: {referencia}", flush=True)
+
+    widget = esperar(
+        d, '.o_field_widget[name="is_storable"]'
+    )
+    casilla = widget.find_element(
+        By.CSS_SELECTOR, 'input[type="checkbox"]'
+    )
+
+    if not casilla.is_selected():
+        casilla.click()
+        clic(d, ".o_form_button_save")
+
+    plantilla = _registros(d, referencia)[0]
+
+    variantes = WebDriverWait(d, TIMEOUT).until(
+        lambda x: _rpc(
+            x, "product.product", "search_read",
+            [[("product_tmpl_id", "=", plantilla["id"])]],
+            fields=["id", "is_storable"],
+        )
+    )
+
+    assert len(variantes) == 1
+    assert variantes[0]["is_storable"] is True
+
+    producto_id = variantes[0]["id"]
+
+    def cantidad(driver):
+        registros = _rpc(
+            driver, "stock.quant", "search_read",
+            [[
+                ("product_id", "=", producto_id),
+                ("location_id", "=", ubicacion_id),
+            ]],
+            fields=["quantity"],
+        )
+        return sum(float(r["quantity"]) for r in registros)
+
+    def movimientos(driver):
+        return _rpc(
+            driver, "stock.move", "search_read",
+            [[
+                ("product_id", "=", producto_id),
+                ("is_inventory", "=", True),
+                ("state", "=", "done"),
+            ]],
+            fields=["id"],
+        )
+
+    def aplicar_conteo(nueva_cantidad):
+        boton = WebDriverWait(d, TIMEOUT).until(
+            lambda x: next(
+                (
+                    e for e in x.find_elements(
+                        By.CSS_SELECTOR,
+                        '.o_form_view button'
+                        '[name="action_update_quantity_on_hand"]'
+                    )
+                    if e.is_displayed() and e.is_enabled()
+                ),
+                False,
+            )
+        )
+        boton.click()
+
+        esperar(
+            d,
+            '.o_dialog .o_field_widget'
+            '[name="new_quantity"] input',
+            timeout=8,
+        )
+
+        _escribir(d, "new_quantity", nueva_cantidad)
+        shot(f"conteo_{nueva_cantidad}")
+
+        clic(
+            d,
+            '.o_dialog button[name="change_product_qty"]'
+        )
+
+        WebDriverWait(d, TIMEOUT).until(
+            EC.invisibility_of_element_located((
+                By.CSS_SELECTOR, ".o_dialog"
+            ))
+        )
+
+    # Precondición: producto nuevo con cero existencias.
+    assert cantidad(d) == pytest.approx(0)
+    assert len(movimientos(d)) == 0
+
+    # Preparación por la UI: 0 -> 5.
+    aplicar_conteo(5)
+
+    WebDriverWait(d, 20).until(
+        lambda x: cantidad(x) == pytest.approx(5)
+    )
+
+    anteriores = movimientos(d)
+    assert len(anteriores) == 1
+
+    shot("stock_inicial_cinco")
+    print("FC-23: precondición de 5 unidades confirmada")
+
+    d.refresh()
+    esperar(d, ".o_form_view")
+
+    # Escenario evaluado: 5 -> 6 (+1 unidad).
+    aplicar_conteo(6)
+
+    WebDriverWait(d, 20).until(
+        lambda x: cantidad(x) == pytest.approx(6)
+    )
+
+    posteriores = movimientos(d)
+
+    ids_anteriores = {m["id"] for m in anteriores}
+    ids_posteriores = {m["id"] for m in posteriores}
+
+    nuevos_movimientos = (
+        ids_posteriores - ids_anteriores
+    )
+
+    assert len(nuevos_movimientos) == 1, (
+        "Se esperaba un nuevo movimiento de ajuste"
+    )
+
+    assert cantidad(d) == pytest.approx(6)
+
+    d.refresh()
+    esperar(d, ".o_form_view")
+    shot("stock_final_seis")
+
+    print(
+        f"FC-23 PASSED: {referencia}, "
+        "5 -> 6 unidades (+1). "
+        "Un nuevo movimiento confirmado.",
+        flush=True,
+    )
+
+    print(
+        "Producto conservado para trazabilidad.",
+        flush=True,
+    )
+
+
+
+def test_fc24_ajuste_negativo(sesion, shot):
+    """FC-24 | RF-24 | TD: ajustes 5->4 y 5->0."""
+
+    d = sesion
+
+    almacenes = _rpc(
+        d, "stock.warehouse", "search_read", [[]],
+        fields=["id", "lot_stock_id"],
+        limit=2,
+    )
+
+    assert len(almacenes) == 1, (
+        "FC-24 requiere un único almacén de pruebas"
+    )
+
+    ubicacion_id = almacenes[0]["lot_stock_id"][0]
+
+    def cantidad(producto_id):
+        registros = _rpc(
+            d, "stock.quant", "search_read",
+            [[
+                ("product_id", "=", producto_id),
+                ("location_id", "=", ubicacion_id),
+            ]],
+            fields=["quantity"],
+        )
+        return sum(float(r["quantity"]) for r in registros)
+
+    def movimientos(producto_id):
+        return _rpc(
+            d, "stock.move", "search_read",
+            [[
+                ("product_id", "=", producto_id),
+                ("is_inventory", "=", True),
+                ("state", "=", "done"),
+            ]],
+            fields=[
+                "id",
+                "product_uom_qty",
+                "location_id",
+                "location_dest_id",
+            ],
+        )
+
+    def aplicar_conteo(nueva_cantidad, etiqueta):
+        boton = WebDriverWait(d, TIMEOUT).until(
+            lambda x: next(
+                (
+                    e for e in x.find_elements(
+                        By.CSS_SELECTOR,
+                        '.o_form_view button'
+                        '[name="action_update_quantity_on_hand"]'
+                    )
+                    if e.is_displayed() and e.is_enabled()
+                ),
+                False,
+            )
+        )
+
+        boton.click()
+
+        esperar(
+            d,
+            '.o_dialog .o_field_widget'
+            '[name="new_quantity"] input',
+        )
+
+        _escribir(d, "new_quantity", nueva_cantidad)
+
+        shot(f"{etiqueta}_conteo_{nueva_cantidad}")
+
+        clic(
+            d,
+            '.o_dialog button[name="change_product_qty"]'
+        )
+
+        WebDriverWait(d, TIMEOUT).until(
+            EC.invisibility_of_element_located((
+                By.CSS_SELECTOR, ".o_dialog"
+            ))
+        )
+
+    # Dos reglas independientes de la tabla de decisión.
+    escenarios = [
+        ("R1", 4),
+        ("R2", 0),
+    ]
+
+    for regla, cantidad_final in escenarios:
+
+        # Crear un producto exclusivo para cada escenario.
+        referencia, _ = _crear_producto(
+            d, [], f"FC24{regla}"
+        )
+
+        print(
+            f"FC-24 {regla}: producto {referencia}",
+            flush=True,
+        )
+
+        widget = esperar(
+            d, '.o_field_widget[name="is_storable"]'
+        )
+
+        casilla = widget.find_element(
+            By.CSS_SELECTOR, 'input[type="checkbox"]'
+        )
+
+        if not casilla.is_selected():
+            casilla.click()
+            clic(d, ".o_form_button_save")
+
+        plantilla = _registros(d, referencia)[0]
+
+        variantes = WebDriverWait(d, TIMEOUT).until(
+            lambda x: _rpc(
+                x, "product.product", "search_read",
+                [[
+                    ("product_tmpl_id", "=", plantilla["id"])
+                ]],
+                fields=["id", "is_storable"],
+            )
+        )
+
+        assert len(variantes) == 1
+        assert variantes[0]["is_storable"] is True
+
+        producto_id = variantes[0]["id"]
+
+        # Precondición: producto nuevo sin inventario.
+        assert cantidad(producto_id) == pytest.approx(0)
+        assert len(movimientos(producto_id)) == 0
+
+        # Preparación: 0 -> 5 unidades.
+        aplicar_conteo(5, regla)
+
+        WebDriverWait(d, 20).until(
+            lambda x: cantidad(producto_id)
+            == pytest.approx(5)
+        )
+
+        anteriores = movimientos(producto_id)
+        assert len(anteriores) == 1
+
+        shot(f"{regla}_stock_inicial_cinco")
+
+        d.refresh()
+        esperar(d, ".o_form_view")
+
+        # Ejecutar el escenario: 5 -> 4 o 5 -> 0.
+        aplicar_conteo(cantidad_final, regla)
+
+        WebDriverWait(d, 20).until(
+            lambda x: cantidad(producto_id)
+            == pytest.approx(cantidad_final)
+        )
+
+        posteriores = movimientos(producto_id)
+
+        ids_anteriores = {m["id"] for m in anteriores}
+
+        nuevos = [
+            m for m in posteriores
+            if m["id"] not in ids_anteriores
+        ]
+
+        assert len(nuevos) == 1, (
+            f"{regla}: se esperaba un nuevo movimiento"
+        )
+
+        movimiento = nuevos[0]
+        diferencia = 5 - cantidad_final
+
+        # Verificar la magnitud del decremento.
+        assert float(
+            movimiento["product_uom_qty"]
+        ) == pytest.approx(diferencia), (
+            f"{regla}: cantidad del movimiento incorrecta"
+        )
+
+        # Verificar que el stock sale de WH/Stock.
+        assert movimiento["location_id"][0] == ubicacion_id, (
+            f"{regla}: origen del movimiento incorrecto"
+        )
+
+        assert (
+            movimiento["location_dest_id"][0] != ubicacion_id
+        ), (
+            f"{regla}: destino del movimiento incorrecto"
+        )
+
+        # Verificar nuevamente la cantidad final.
+        assert cantidad(producto_id) == pytest.approx(
+            cantidad_final
+        )
+
+        d.refresh()
+        esperar(d, ".o_form_view")
+
+        shot(f"{regla}_resultado_{cantidad_final}")
+
+        print(
+            f"FC-24 {regla} PASSED: "
+            f"5 -> {cantidad_final} unidades "
+            f"(-{diferencia}). "
+            "Movimiento confirmado.",
+            flush=True,
+        )
+
+    print(
+        "FC-24: ambas reglas verificadas. "
+        "Productos conservados para trazabilidad.",
+        flush=True,
     )
