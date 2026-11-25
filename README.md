@@ -27,3 +27,4 @@ Ver `README_SETUP.md`: levantar Odoo con Docker y preparar el entorno de Python.
 cd functional
 pytest test_heidy.py -v --html=../evidencia/reporte_heidy.html --self-contained-html
 ```
+Aportes de Rubén Darío Saa
