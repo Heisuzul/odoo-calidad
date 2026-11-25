@@ -321,9 +321,23 @@ def _buscar(driver, texto):
     )
 
 
+
 def _nombres_lista(driver):
-    return [c.text.strip() for c in driver.find_elements(
-        By.CSS_SELECTOR, '.o_list_view .o_data_row td[name="name"]')]
+    """Lee los nombres visibles desde el DOM actual de Odoo.
+
+    La lectura ocurre en una sola operación, evitando
+    referencias obsoletas durante el renderizado.
+    """
+    return driver.execute_script("""
+        return Array.from(
+            document.querySelectorAll(
+                '.o_list_view .o_data_row td[name="name"]'
+            )
+        )
+        .filter(el => el.getClientRects().length > 0)
+        .map(el => (el.innerText || el.textContent).trim())
+        .filter(Boolean);
+    """)
 
 
 def test_fc05_modificar_precio(sesion, productos_daniel, shot):

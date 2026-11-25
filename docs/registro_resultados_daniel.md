@@ -48,3 +48,55 @@ Observación: Durante ejecuciones previas se presentaron problemas
 de automatización relacionados con navegación y sincronización.
 Después de ajustar las esperas, la prueba finalizó correctamente.
 
+
+### FC-06 — Valores frontera del precio de venta
+
+- Fecha: 24/11/2026
+- Técnica: análisis de valores límite
+- Aplicación: Odoo 18, módulo Inventario
+- Valores evaluados: 0.00 y 0.01
+- Resultado observado: ambos valores fueron guardados correctamente
+- Persistencia tras recarga: confirmada
+- Estado: PASSED
+- Duración: 16,05 segundos
+- Reporte: evidencia/reporte_daniel_fc06.html
+- No conformidades funcionales confirmadas: 0
+- Limitación: no se evaluaron valores negativos ni un límite superior.
+
+Conclusión: Odoo conservó correctamente los valores 0.00 y
+0.01 después de modificar el precio y recargar el producto.
+
+
+### FC-07 — Búsqueda por referencia interna
+
+- Fecha: 24/11/2026
+- Técnica: partición de equivalencia
+- Aplicación: Odoo 18, módulo Inventario
+- Escenarios: referencia existente e inexistente
+- Estado: PASSED
+- Duración: 22,09 segundos
+- Reporte: evidencia/reporte_daniel_fc07.html
+- No conformidades funcionales confirmadas: 0
+
+Conclusión: La prueba automatizada finalizó exitosamente.
+Durante una ejecución anterior se presentó un error
+StaleElementReferenceException al leer resultados de búsqueda.
+Después de corregir la lectura del DOM, la prueba pasó.
+
+
+### FC-09 — Modificación del costo del producto
+
+- Fecha: 24/11/2026
+- Técnica: partición de equivalencia
+- Aplicación: Odoo 18 - Inventario
+- Costo inicial: 120
+- Costo modificado: 200
+- Valor observado tras recarga: 200
+- Estado: PASSED
+- Duración: 13,56 segundos
+- Reporte: evidencia/reporte_daniel_fc09.html
+- No conformidades funcionales confirmadas: 0
+
+Conclusión: El sistema permitió modificar el costo del producto
+y conservó correctamente el nuevo valor después de recargar.
+
