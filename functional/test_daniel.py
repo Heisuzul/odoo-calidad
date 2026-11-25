@@ -22,7 +22,10 @@ Configurar ODOO_URL, ODOO_DB, ODOO_USER y ODOO_PASS previamente, de forma local.
 from uuid import uuid4
 
 import pytest
-from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import (
+    StaleElementReferenceException,
+    TimeoutException,
+)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
@@ -99,7 +102,79 @@ def _escribir(driver, nombre, valor):
     campo.send_keys(Keys.TAB)
 
 
+
+
 def _abrir_lista(driver):
+    """Abre Productos y cambia a vista de lista en Odoo 18."""
+
+    ruta = (
+        "/odoo/action-stock.product_template_action_product"
+        if ODOO_VERSION >= 18
+        else "/web#action=stock.product_template_action_product"
+    )
+
+    driver.get(BASE_URL + ruta)
+
+    # Esperar a que el buscador esté disponible.
+    esperar(driver, ".o_searchview_input")
+
+    # Esperar a que Odoo termine de mostrar
+    # la vista o el botón para cambiarla.
+    WebDriverWait(driver, TIMEOUT).until(
+        lambda d: d.find_elements(
+            By.CSS_SELECTOR, ".o_list_view"
+        ) or d.find_elements(
+            By.CSS_SELECTOR, "button.o_switch_view.o_list"
+        )
+    )
+
+    # Comprobar si ya estamos en la vista de lista.
+    vista_lista = driver.find_elements(
+        By.CSS_SELECTOR, ".o_list_view"
+    )
+
+    if not any(v.is_displayed() for v in vista_lista):
+        # Esperar hasta que el botón sea interactivo.
+        boton_lista = WebDriverWait(driver, TIMEOUT).until(
+            EC.element_to_be_clickable((
+                By.CSS_SELECTOR,
+                "button.o_switch_view.o_list"
+            ))
+        )
+        boton_lista.click()
+
+    # Confirmar que la vista terminó de cambiar.
+    esperar(driver, ".o_list_view")
+
+    # Confirmar que podemos crear un producto.
+    esperar(driver, ".o_list_button_add")
+
+    print("FC-05: vista de productos disponible")
+
+    """Abre la lista de productos de Odoo 18."""
+
+    ruta = (
+        '/odoo/action-stock.product_template_action_product'
+        if ODOO_VERSION >= 18
+        else '/web#action=stock.product_template_action_product'
+    )
+
+    driver.get(BASE_URL + ruta)
+
+    # Esperar a que cargue la vista de productos.
+    esperar(driver, '.o_searchview_input')
+
+    # Cambiar a vista de lista cuando sea necesario.
+    botones_lista = driver.find_elements(
+        By.CSS_SELECTOR, '.o_switch_view.o_list'
+    )
+
+    if botones_lista and botones_lista[0].is_displayed():
+        clic(driver, '.o_switch_view.o_list')
+
+    # Confirmar que la lista está disponible.
+    esperar(driver, '.o_list_view')
+
     ruta = ('/odoo/action-stock.product_template_action_product'
             if ODOO_VERSION >= 18 else
             '/web#action=stock.product_template_action_product')
@@ -145,33 +220,90 @@ def _crear_producto(driver, referencias, id_caso, **campos):
     return referencia, nombre
 
 
+
 def _verificar_persistencia(driver, referencia, campo, esperado):
-    """Exige que Odoo haya guardado el dato en BD tras la acción en UI."""
-    registros = WebDriverWait(driver, TIMEOUT).until(
-        lambda d: _registros(d, referencia),
-        message='No se recuperó el producto creado',
+    """Espera hasta confirmar el valor persistido en Odoo."""
+
+    esperado = float(esperado)
+    ultimo = []
+
+    def coincide(d):
+        nonlocal ultimo
+
+        ultimo = _registros(d, referencia)
+
+        if len(ultimo) != 1:
+            return False
+
+        real = float(ultimo[0][campo])
+
+        return real == pytest.approx(
+            esperado, abs=0.000001
+        )
+
+    try:
+        WebDriverWait(
+            driver, 20, poll_frequency=0.5
+        ).until(coincide)
+
+    except TimeoutException as exc:
+        real = (
+            ultimo[0].get(campo)
+            if len(ultimo) == 1
+            else "producto no encontrado"
+        )
+
+        raise AssertionError(
+            f"{campo}: esperado={esperado}, "
+            f"persistido={real} después de 20 segundos"
+        ) from exc
+
+    print(
+        f"Persistencia confirmada: "
+        f"{campo}={esperado}",
+        flush=True
     )
-    assert len(registros) == 1
-    real = float(registros[0][campo])
-    assert real == pytest.approx(float(esperado), abs=0.000001), (
-        f'{campo}: esperado={esperado}, persistido={real}'
-    )
-    return registros[0]
+
+    return ultimo[0]
+
+
 
 
 def _actualizar_y_recargar(driver, referencia, campo, valor):
+    """Edita, guarda y comprueba persistencia."""
+
+    antes = _campo(driver, campo).get_attribute("value")
+
     _escribir(driver, campo, valor)
-    clic(driver, '.o_form_button_save')
-    _verificar_persistencia(driver, referencia, campo, valor)
-    driver.refresh()
-    WebDriverWait(driver, TIMEOUT,
-                  ignored_exceptions=(StaleElementReferenceException,)).until(
-        lambda d: _campo(d, campo).is_displayed(),
+
+    despues = _campo(driver, campo).get_attribute("value")
+
+    print(f"Valor antes de editar: {antes}", flush=True)
+    print(f"Valor después de escribir: {despues}", flush=True)
+
+    clic(driver, ".o_form_button_save")
+
+    print("Botón Guardar presionado", flush=True)
+
+    # Esperar a que cambie el valor en la base de datos.
+    _verificar_persistencia(
+        driver, referencia, campo, valor
     )
-    # La consulta del registro verifica la persistencia. También confirmamos
-    # que el campo está presente en el formulario después del refresh.
-    assert _campo(driver, campo).is_displayed()
-    return _verificar_persistencia(driver, referencia, campo, valor)
+
+    # Recargar la página.
+    driver.refresh()
+
+    esperar(driver, ".o_form_view")
+
+    print(
+        "Valor visible tras recargar:",
+        _campo(driver, campo).get_attribute("value"),
+        flush=True
+    )
+
+    return _verificar_persistencia(
+        driver, referencia, campo, valor
+    )
 
 
 def _buscar(driver, texto):
