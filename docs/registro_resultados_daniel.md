@@ -100,3 +100,22 @@ Después de corregir la lectura del DOM, la prueba pasó.
 Conclusión: El sistema permitió modificar el costo del producto
 y conservó correctamente el nuevo valor después de recargar.
 
+
+### FC-08 — Archivar y restaurar un producto
+
+- Fecha: 24/11/2026
+- Técnica: transición de estados
+- Aplicación: Odoo 18 - Inventario
+- Transición evaluada: activo → archivado → activo
+- Estado inicial: activo
+- Estado intermedio: archivado, oculto en la lista normal
+- Estado final: restaurado, visible nuevamente
+- Resultado: PASSED
+- Duración: 29,17 segundos
+- Reporte: evidencia/reporte_daniel_fc08.html
+- No conformidades funcionales confirmadas: 0
+
+Conclusión: Odoo permitió archivar y restaurar el producto
+mediante la interfaz. El estado persistido y la visibilidad
+en el listado coincidieron con los resultados esperados.
+

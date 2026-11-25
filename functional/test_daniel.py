@@ -104,8 +104,9 @@ def _escribir(driver, nombre, valor):
 
 
 
+
 def _abrir_lista(driver):
-    """Abre Productos y cambia a vista de lista en Odoo 18."""
+    """Abre una única vez la lista de productos de Odoo."""
 
     ruta = (
         "/odoo/action-stock.product_template_action_product"
@@ -115,88 +116,34 @@ def _abrir_lista(driver):
 
     driver.get(BASE_URL + ruta)
 
-    # Esperar a que el buscador esté disponible.
     esperar(driver, ".o_searchview_input")
 
-    # Esperar a que Odoo termine de mostrar
-    # la vista o el botón para cambiarla.
     WebDriverWait(driver, TIMEOUT).until(
-        lambda d: d.find_elements(
-            By.CSS_SELECTOR, ".o_list_view"
-        ) or d.find_elements(
-            By.CSS_SELECTOR, "button.o_switch_view.o_list"
+        lambda d: (
+            d.find_elements(By.CSS_SELECTOR, ".o_list_view")
+            or d.find_elements(
+                By.CSS_SELECTOR,
+                "button.o_switch_view.o_list"
+            )
         )
     )
 
-    # Comprobar si ya estamos en la vista de lista.
-    vista_lista = driver.find_elements(
+    listas = driver.find_elements(
         By.CSS_SELECTOR, ".o_list_view"
     )
 
-    if not any(v.is_displayed() for v in vista_lista):
-        # Esperar hasta que el botón sea interactivo.
-        boton_lista = WebDriverWait(driver, TIMEOUT).until(
+    if not any(lista.is_displayed() for lista in listas):
+        WebDriverWait(driver, TIMEOUT).until(
             EC.element_to_be_clickable((
                 By.CSS_SELECTOR,
                 "button.o_switch_view.o_list"
             ))
-        )
-        boton_lista.click()
+        ).click()
 
-    # Confirmar que la vista terminó de cambiar.
     esperar(driver, ".o_list_view")
-
-    # Confirmar que podemos crear un producto.
     esperar(driver, ".o_list_button_add")
 
-    print("FC-05: vista de productos disponible")
-
-    """Abre la lista de productos de Odoo 18."""
-
-    ruta = (
-        '/odoo/action-stock.product_template_action_product'
-        if ODOO_VERSION >= 18
-        else '/web#action=stock.product_template_action_product'
-    )
-
-    driver.get(BASE_URL + ruta)
-
-    # Esperar a que cargue la vista de productos.
-    esperar(driver, '.o_searchview_input')
-
-    # Cambiar a vista de lista cuando sea necesario.
-    botones_lista = driver.find_elements(
-        By.CSS_SELECTOR, '.o_switch_view.o_list'
-    )
-
-    if botones_lista and botones_lista[0].is_displayed():
-        clic(driver, '.o_switch_view.o_list')
-
-    # Confirmar que la lista está disponible.
-    esperar(driver, '.o_list_view')
-
-    ruta = ('/odoo/action-stock.product_template_action_product'
-            if ODOO_VERSION >= 18 else
-            '/web#action=stock.product_template_action_product')
-    driver.get(BASE_URL + ruta)
-    esperar(driver, '.o_searchview_input')
-    # Retiramos posibles filtros predeterminados (Goods, etc.).
-    for _ in range(8):
-        botones = driver.find_elements(By.CSS_SELECTOR,
-                                       '.o_searchview .o_facet_remove')
-        if not botones:
-            break
-        cantidad = len(botones)
-        clic(driver, '.o_searchview .o_facet_remove')
-        WebDriverWait(driver, TIMEOUT).until(
-            lambda d: len(d.find_elements(
-                By.CSS_SELECTOR, '.o_searchview .o_facet_remove')) < cantidad
-        )
-    # Odoo normalmente abre productos en vista kanban.
-    botones_lista = driver.find_elements(By.CSS_SELECTOR, '.o_switch_view.o_list')
-    if botones_lista and botones_lista[0].is_displayed():
-        botones_lista[0].click()
-    esperar(driver, '.o_list_view')
+    print("Vista de productos disponible", flush=True)
 
 
 def _crear_producto(driver, referencias, id_caso, **campos):
@@ -394,3 +341,162 @@ def test_fc09_modificar_costo(sesion, productos_daniel, shot):
     shot('costo_inicial_120')
     _actualizar_y_recargar(d, referencia, 'standard_price', 200)
     shot('costo_final_200')
+
+
+def _filtrar_archivados_daniel(driver):
+    """Activa el filtro Archived desde la interfaz de Odoo 18."""
+
+    clic(driver, ".o_searchview_dropdown_toggler")
+
+    filtro = WebDriverWait(driver, TIMEOUT).until(
+        EC.element_to_be_clickable((
+            By.XPATH,
+            "//div[contains(@class,'o_filter_menu')]"
+            "//*[@role='menuitemcheckbox']"
+            "[normalize-space()='Archived' "
+            "or normalize-space()='Archivados']"
+        ))
+    )
+
+    filtro.click()
+
+    # Cerrar el menú de búsqueda.
+    clic(driver, ".o_searchview_dropdown_toggler")
+
+    WebDriverWait(driver, TIMEOUT).until(
+        lambda d: any(
+            e.text.strip() in ("Archived", "Archivados")
+            for e in d.find_elements(
+                By.CSS_SELECTOR, ".o_facet_value"
+            )
+        )
+    )
+
+
+def _estado_activo_daniel(driver, referencia):
+    """Consulta exclusivamente el estado persistido del producto."""
+
+    registros = _registros(driver, referencia)
+
+    assert len(registros) == 1, (
+        f"Se esperaba un único producto: {referencia}"
+    )
+
+    return bool(registros[0]["active"])
+
+
+def test_fc08_restaurar_producto(sesion, productos_daniel, shot):
+    """FC-08 | RF-08 | TE: activo -> archivado -> activo."""
+
+    d = sesion
+
+    # ESTADO 1: crear producto activo.
+    referencia, nombre = _crear_producto(
+        d, productos_daniel, "FC08"
+    )
+
+    assert _estado_activo_daniel(d, referencia) is True
+
+    shot("01_producto_activo")
+
+    # TRANSICIÓN 1: archivar mediante la interfaz.
+    clic(d, ".o_cp_action_menus button")
+
+    WebDriverWait(d, TIMEOUT).until(
+        EC.element_to_be_clickable((
+            By.XPATH,
+            "//*[@role='menuitem']"
+            "[normalize-space()='Archive' "
+            "or normalize-space()='Archivar']"
+        ))
+    ).click()
+
+    # Confirmar archivado.
+    clic(d, ".o_dialog .modal-footer .btn-primary")
+
+    WebDriverWait(d, TIMEOUT).until(
+        lambda x: _estado_activo_daniel(
+            x, referencia
+        ) is False
+    )
+
+    # El producto archivado no debe aparecer
+    # en el listado normal de productos activos.
+    _abrir_lista(d)
+    _buscar(d, referencia)
+
+    WebDriverWait(d, TIMEOUT).until(
+        lambda x: (
+            not _nombres_lista(x)
+            and any(
+                e.is_displayed()
+                for e in x.find_elements(
+                    By.CSS_SELECTOR, ".o_view_nocontent"
+                )
+            )
+        )
+    )
+
+    assert _nombres_lista(d) == []
+
+    shot("02_producto_archivado_oculto")
+
+    # ESTADO 2: localizarlo con el filtro Archived.
+    _abrir_lista(d)
+    _filtrar_archivados_daniel(d)
+    _buscar(d, referencia)
+
+    WebDriverWait(d, TIMEOUT).until(
+        lambda x: nombre in _nombres_lista(x)
+    )
+
+    assert _nombres_lista(d) == [nombre]
+
+    shot("03_producto_en_archivados")
+
+    # Abrir el producto archivado.
+    WebDriverWait(d, TIMEOUT).until(
+        EC.element_to_be_clickable((
+            By.CSS_SELECTOR,
+            '.o_list_view .o_data_row td[name="name"]'
+        ))
+    ).click()
+
+    esperar(d, ".o_form_view")
+
+    # TRANSICIÓN 2: restaurar desde Acción > Unarchive.
+    clic(d, ".o_cp_action_menus button")
+
+    WebDriverWait(d, TIMEOUT).until(
+        EC.element_to_be_clickable((
+            By.XPATH,
+            "//*[@role='menuitem']"
+            "[normalize-space()='Unarchive' "
+            "or normalize-space()='Desarchivar']"
+        ))
+    ).click()
+
+    WebDriverWait(d, TIMEOUT).until(
+        lambda x: _estado_activo_daniel(
+            x, referencia
+        ) is True
+    )
+
+    # ESTADO 3: comprobar que volvió al listado activo.
+    _abrir_lista(d)
+    _buscar(d, referencia)
+
+    WebDriverWait(d, TIMEOUT).until(
+        lambda x: nombre in _nombres_lista(x)
+    )
+
+    assert _nombres_lista(d) == [nombre]
+    assert _estado_activo_daniel(d, referencia) is True
+
+    shot("04_producto_restaurado_activo")
+
+    print(
+        "FC-08: activo -> archivado -> activo "
+        "verificado correctamente",
+        flush=True
+    )
