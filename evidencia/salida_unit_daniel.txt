@@ -1,0 +1,28 @@
+DANIEL | Odoo 18 | 2 metodos originales | 13 casos
+test_ud101_diferencia_positiva (__main__.TestDanielDiferenciaConteo.test_ud101_diferencia_positiva) ... ok
+test_ud102_diferencia_cero (__main__.TestDanielDiferenciaConteo.test_ud102_diferencia_cero) ... ok
+test_ud103_diferencia_negativa (__main__.TestDanielDiferenciaConteo.test_ud103_diferencia_negativa) ... ok
+test_ud104_calculo_independiente_con_lote (__main__.TestDanielDiferenciaConteo.test_ud104_calculo_independiente_con_lote) ... ok
+test_ud105_varios_quants_en_lote (__main__.TestDanielDiferenciaConteo.test_ud105_varios_quants_en_lote) ... ok
+test_ud106_recordset_vacio (__main__.TestDanielDiferenciaConteo.test_ud106_recordset_vacio) ... ok
+test_ud201_pronostico_inferior_al_minimo (__main__.TestDanielCalculoReabastecimiento.test_ud201_pronostico_inferior_al_minimo) ... ok
+test_ud202_pronostico_igual_al_minimo (__main__.TestDanielCalculoReabastecimiento.test_ud202_pronostico_igual_al_minimo) ... ok
+test_ud203_minimo_igual_maximo (__main__.TestDanielCalculoReabastecimiento.test_ud203_minimo_igual_maximo) ... ok
+test_ud204_multiplo_de_reposicion (__main__.TestDanielCalculoReabastecimiento.test_ud204_multiplo_de_reposicion) ... ok
+test_ud205_reglas_mixtas_en_lote (__main__.TestDanielCalculoReabastecimiento.test_ud205_reglas_mixtas_en_lote) ... ok
+test_ud206_regla_no_guardada (__main__.TestDanielCalculoReabastecimiento.test_ud206_regla_no_guardada) ... ok
+test_ud207_recordset_vacio (__main__.TestDanielCalculoReabastecimiento.test_ud207_recordset_vacio) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 1.186s
+
+OK
+
+COBERTURA DE SENTENCIAS (solo los 2 metodos elegidos)
+StockQuant._compute_inventory_diff_quantity: 2/2 (100.0%); fuente=/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_quant.py
+StockWarehouseOrderpoint._compute_qty_to_order_computed: 7/7 (100.0%); fuente=/usr/lib/python3/dist-packages/odoo/addons/stock/models/stock_orderpoint.py
+DECISIONES DISENADAS (validacion por escenarios, no medidor automatico)
+  M1: bucle cero/uno/varios; diferencias positiva/cero/negativa.
+  M2: id transitorio vs guardado; pronostico < minimo vs igual;
+      bucle cero/varios; reposicion con/sin multiplo.
+RESULTADO: 13 pruebas; 0 fallidas, 0 errores, 0 omitidas.
